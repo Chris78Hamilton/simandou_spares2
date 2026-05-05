@@ -191,6 +191,25 @@ tr:last-child td{border-bottom:none}
 .stock-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'Courier New',monospace}
 .issue-warn{color:#b91c1c;font-size:12px;font-family:'Courier New',monospace;margin-top:6px;min-height:18px}
 
+
+/* ── COLUMN FILTERS ── */
+.col-filter-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;padding:10px 12px;
+  background:var(--surface);border:1.5px solid var(--border);border-radius:8px;box-shadow:var(--shadow)}
+.col-filter-wrap{display:flex;flex-direction:column;gap:2px;flex:1;min-width:100px;max-width:180px}
+.col-filter-lbl{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);
+  font-family:'Courier New',monospace;font-weight:700;padding-left:2px}
+.col-filter-sel{padding:5px 7px;background:var(--surface2);border:1.5px solid var(--border);
+  border-radius:5px;color:var(--text2);font-family:'Courier New',monospace;font-size:11px;
+  cursor:pointer;width:100%}
+.col-filter-sel:focus{outline:none;border-color:var(--accent)}
+.col-filter-sel.active{border-color:var(--accent);background:#fef3c7;color:var(--text);font-weight:700}
+.filter-clear{padding:5px 12px;background:none;border:1.5px solid var(--border);border-radius:5px;
+  color:var(--text3);font-family:'Courier New',monospace;font-size:11px;cursor:pointer;
+  align-self:flex-end;white-space:nowrap;margin-top:16px}
+.filter-clear:hover{background:var(--danger);border-color:var(--danger);color:#fff}
+.filter-active-count{font-size:11px;color:var(--accent);font-family:'Courier New',monospace;
+  font-weight:700;align-self:flex-end;margin-top:18px;white-space:nowrap}
+
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
@@ -342,6 +361,7 @@ let issLog=[],nid=db.length;
 let view='dash';   // dash | mm | ABB | TAKRAF | pres | log
 let commF='ALL';   // ALL | COMM | CI | 2YR | ST  (used in mm/ABB/TAKRAF views)
 let q='',oemF='',sc=null,sd=1,pg=0,ei=null,issIdx=null;
+let colFilters={shipment_ref:'',packing_list:'',commodity:'',oem:'',system:'',subsystem:'',bin:'',preservation:'',unit:''};
 const PS=100;
 
 const CL={'COMM':'#2563eb','CI':'#7c3aed','2YR':'#059669','ST':'#d97706'};
@@ -350,8 +370,57 @@ const CT={'COMM':'#1e3a8a','CI':'#4c1d95','2YR':'#064e3b','ST':'#78350f'};
 const CN={'COMM':'Commissioning Spares','CI':'Capital Insurance Spares','2YR':'2-Year Operational Spares','ST':'Special Tools'};
 
 // ── Navigation ──────────────────────────────────────────────────────────────
+
+
+function buildFilterBar(srcAll){
+  const cols=[
+    {col:'shipment_ref', label:'Shipment Ref'},
+    {col:'packing_list', label:'Packing List'},
+    {col:'commodity',    label:'Commodity'},
+    {col:'oem',         label:'OEM'},
+    {col:'system',      label:'System'},
+    {col:'subsystem',   label:'Sub System'},
+    {col:'bin',         label:'Bin Location'},
+    {col:'preservation',label:'Preservation'},
+    {col:'unit',        label:'UOM'},
+  ];
+  const parts = cols.map(({col,label})=>buildColFilter(col,label,srcAll)).filter(Boolean);
+  const ac = activeFilterCount();
+  const clearBtn = ac>0
+    ? `<button class="filter-clear" onclick="clearAllFilters()">&#10005; Clear All</button><div class="filter-active-count">${ac} filter${ac>1?'s':''} active</div>`
+    : '';
+  return `<div class="col-filter-bar">${parts.join('')}${clearBtn}</div>`;
+}
+
+function setColFilter(col, val){ colFilters[col]=val; pg=0; render(); }
+function clearAllFilters(){
+  colFilters={shipment_ref:'',packing_list:'',commodity:'',oem:'',system:'',subsystem:'',bin:'',preservation:'',unit:''};
+  q=''; oemF=''; pg=0;
+  const ms=document.getElementById('main-search'); if(ms) ms.value='';
+  render();
+}
+function activeFilterCount(){
+  return Object.values(colFilters).filter(v=>v!=='').length + (q?1:0);
+}
+function buildColFilter(col, label, srcRows){
+  const vals=[...new Set(srcRows.map(r=>{
+    if(col==='oem') return r.oem||r.manufacturer||'';
+    return r[col]||'';
+  }))].filter(v=>v!=='').sort();
+  if(vals.length===0) return '';
+  const active=colFilters[col]!=='';
+  return \`<div class="col-filter-wrap">
+    <div class="col-filter-lbl">\${label}</div>
+    <select class="col-filter-sel \${active?'active':''}" onchange="setColFilter('\${col}',this.value)">
+      <option value="">All</option>
+      \${vals.map(v=>\`<option value="\${v}" \${colFilters[col]===v?'selected':''}>\${v.length>22?v.substring(0,20)+'…':v}</option>\`).join('')}
+    </select>
+  </div>\`;
+}
+
 function setView(v){
   view=v; q=''; oemF=''; pg=0;
+  colFilters={shipment_ref:'',packing_list:'',commodity:'',oem:'',system:'',subsystem:'',bin:'',preservation:'',unit:''};
   // Row 1 tabs
   document.querySelectorAll('.tab-dash,.tab-mm,.tab-abb,.tab-tak,.tab-pres,.tab-log')
     .forEach(el=>el.classList.remove('active'));
@@ -366,6 +435,7 @@ function setView(v){
 
 function setComm(c){
   commF=c; pg=0; q='';
+  colFilters={shipment_ref:'',packing_list:'',commodity:'',oem:'',system:'',subsystem:'',bin:'',preservation:'',unit:''};
   updateCommTabs(); render();
 }
 
@@ -524,7 +594,11 @@ function renderTabulation(el){
     </div>`;
   }
 
-  el.innerHTML=`${banner}
+  // Build column filter bar using the full unfiltered source
+    const filterBar=buildFilterBar(srcAll);:''}
+  </div>\`;
+
+  el.innerHTML=banner+filterBar+`
   <div class="toolbar">
     <div class="srch"><span class="srch-ico">⌕</span>
       <input id="main-search" placeholder="Search description, part no, tag, system, bin…" oninput="debSearch(this.value)">
@@ -548,6 +622,16 @@ function getFiltered(src){
   const ql=q.toLowerCase();
   return src.filter(r=>{
     if(oemF && (r.oem||r.manufacturer||'')!==oemF) return false;
+    // Column filters
+    if(colFilters.shipment_ref && r.shipment_ref!==colFilters.shipment_ref) return false;
+    if(colFilters.packing_list && r.packing_list!==colFilters.packing_list) return false;
+    if(colFilters.commodity && r.commodity!==colFilters.commodity) return false;
+    if(colFilters.oem && (r.oem||r.manufacturer||'')!==colFilters.oem) return false;
+    if(colFilters.system && r.system!==colFilters.system) return false;
+    if(colFilters.subsystem && r.subsystem!==colFilters.subsystem) return false;
+    if(colFilters.bin && r.bin!==colFilters.bin) return false;
+    if(colFilters.preservation && r.preservation!==colFilters.preservation) return false;
+    if(colFilters.unit && r.unit!==colFilters.unit) return false;
     if(!ql) return true;
     return(r.description+r.pn+r.tag+r.system+r.subsystem+r.bin+r.shipment_ref+r.packing_list+r.notes).toLowerCase().includes(ql);
   });
