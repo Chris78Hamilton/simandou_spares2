@@ -411,9 +411,14 @@ function render(){
   if(view==='dash')   renderDash(el);
   else if(view==='pres') renderPres(el);
   else if(view==='log')  renderLog(el);
-  else renderTabulation(el); // mm | ABB | TAKRAF
+  else renderTabulation(el);
   updateLogCount();
   if(view==='mm'||view==='ABB'||view==='TAKRAF') updateCommTabs();
+  // Restore search input value after re-render
+  const ms=document.getElementById('main-search');
+  if(ms && ms.value!==q) ms.value=q;
+  const ps=document.getElementById('pres-search');
+  if(ps && ps.value!==q) ps.value=q;
 }
 
 // ── DASHBOARD ───────────────────────────────────────────────────────────────
@@ -533,7 +538,7 @@ function renderTabulation(el){
   el.innerHTML=`${banner}
   <div class="toolbar">
     <div class="srch"><span class="srch-ico">⌕</span>
-      <input placeholder="Search description, part no, tag, system, bin…" value="${q}" oninput="q=this.value;pg=0;render()">
+      <input id="main-search" placeholder="Search description, part no, tag, system, bin…" oninput="debSearch(this.value)">
     </div>
     ${view==='mm'?`<select class="fsel" onchange="oemF=this.value;pg=0;render()">
       <option value="">All OEMs</option>
@@ -645,7 +650,7 @@ function renderPres(el){
   </div>
   <div class="toolbar">
     <div class="srch"><span class="srch-ico">⌕</span>
-      <input placeholder="Search preservation items…" value="${q}" oninput="q=this.value;render()">
+      <input id="pres-search" placeholder="Search preservation items…" oninput="debSearch(this.value)">
     </div>
     <div class="rcount">${filt.length.toLocaleString()} items</div>
   </div>
@@ -899,6 +904,25 @@ function exportLogCSV(){
   dl([h.join(','),...rows].join('\n'),`simandou_issue_log_${new Date().toISOString().split('T')[0]}.csv`);
 }
 function dl(csv,name){const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=name;a.click();}
+
+
+// ── SEARCH DEBOUNCE — keeps input focus and cursor position ──────────────
+let _searchTimer = null;
+function debSearch(val){
+  q = val;
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(()=>{
+    pg = 0;
+    const activeId = document.activeElement ? document.activeElement.id : null;
+    const selStart = document.activeElement ? document.activeElement.selectionStart : null;
+    render();
+    // Restore focus and cursor after re-render
+    if(activeId){
+      const el = document.getElementById(activeId);
+      if(el){ el.focus(); try{ el.setSelectionRange(selStart, selStart); }catch(e){} }
+    }
+  }, 120);
+}
 
 document.getElementById('ov-edit').addEventListener('click',function(e){if(e.target===this)closeModals();});
 document.getElementById('ov-issue').addEventListener('click',function(e){if(e.target===this)closeModals();});
